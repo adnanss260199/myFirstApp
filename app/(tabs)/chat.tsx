@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -15,15 +15,39 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Message {
   id: string;
   text: string;
   sender: 'user' | 'bot';
+  senderId?: string;
   timestamp: Date;
 }
 
 export default function ChatScreen() {
+  const [userId, setUserId] = useState<string>('');
+
+  // Fungsi untuk mengambil atau membuat ID unik di HP ini
+  useEffect(() => {
+    const getUserId = async () => {
+      try {
+        let id = await AsyncStorage.getItem('user_id');
+        if (!id) {
+          // Buat ID acak jika belum ada (misal: USER-XY123)
+          id = 'USER-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+          await AsyncStorage.setItem('user_id', id);
+        }
+        setUserId(id);
+        console.log("ID Perangkat Ini:", id);
+      } catch (e) {
+        console.error("Gagal memproses User ID", e);
+      }
+    };
+    getUserId();
+  }, []);
+
+  // ... (kode messages dan lainnya)
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', text: 'Halo! Ada yang bisa saya bantu hari ini?', sender: 'bot', timestamp: new Date() },
   ]);
@@ -32,17 +56,18 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
 
   const handleSend = useCallback(() => {
-    if (inputText.trim().length === 0) return;
+    if (inputText.trim().length === 0 || !userId) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      sender: 'user',
-      timestamp: new Date(),
-    };
+  const userMessage: Message = {
+    id: Date.now().toString(),
+    text: inputText.trim(),
+    sender: 'user',
+    senderId: userId, // Masukkan ID unik di sini
+    timestamp: new Date(),
+  };
 
-    setMessages((prev) => [userMessage, ...prev]);
-    setInputText('');
+  setMessages((prev) => [userMessage, ...prev]);
+  setInputText('');
 
   // Simulasi respon otomatis dari bot
     setTimeout(() => {
@@ -68,7 +93,7 @@ export default function ChatScreen() {
 
       setMessages((prev) => [botResponse, ...prev]);
     }, 1000);
-  }, [inputText]);
+  }, [inputText, userId]);
 
 const renderItem: ListRenderItem<Message> = ({ item }) => {
   const isUser = item.sender === 'user';
