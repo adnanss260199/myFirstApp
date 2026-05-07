@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from 'react';
 import {
-    FlatList,
-    KeyboardAvoidingView,
-    ListRenderItem,
-    Platform,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
+  FlatList,
+  KeyboardAvoidingView,
+  ListRenderItem,
+  Platform,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
