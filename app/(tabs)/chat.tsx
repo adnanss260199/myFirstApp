@@ -56,23 +56,29 @@ export default function ChatScreen() {
     }, 1000);
   }, [inputText]);
 
-  const renderItem: ListRenderItem<Message> = ({ item }) => {
-    const isUser = item.sender === 'user';
-    return (
-      <ThemedView style={[styles.messageRow, isUser ? styles.userRow : styles.botRow]}>
-        <ThemedView
-          style={[
-            styles.bubble,
-            isUser ? styles.userBubble : styles.botBubble,
-            { backgroundColor: isUser ? '#007AFF' : colorScheme === 'dark' ? '#3A3A3C' : '#E9E9EB' },
-          ]}>
-          <ThemedText style={[styles.messageText, isUser && styles.userMessageText]}>
-            {item.text}
-          </ThemedText>
-        </ThemedView>
+const renderItem: ListRenderItem<Message> = ({ item }) => {
+  const isUser = item.sender === 'user';
+  return (
+    <ThemedView style={[styles.messageRow, isUser ? styles.userRow : styles.botRow]}>
+      <ThemedView style={[
+        styles.bubble, 
+        isUser ? styles.userBubble : styles.botBubble,
+        // Ganti warna ke hijau khas WA (#dcf8c6)
+        { backgroundColor: isUser ? '#dcf8c6' : colorScheme === 'dark' ? '#1f2c33' : '#fff' }
+      ]}>
+        {/* Teks Pesan */}
+        <ThemedText style={[styles.messageText, { color: '#000' }]}>
+          {item.text}
+        </ThemedText>
+        
+        {/* TAMBAHAN KODE: Jam pengiriman */}
+        <ThemedText style={styles.timestampText}>
+          {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </ThemedText>
       </ThemedView>
-    );
-  };
+    </ThemedView>
+  );
+};
 
   return (
     <KeyboardAvoidingView
@@ -103,7 +109,7 @@ export default function ChatScreen() {
             multiline
           />
           <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
-            <IconSymbol name="paperplane.fill" size={24} color="#007AFF" />
+            <IconSymbol name="paperplane.fill" size={20} color="#fff" />
           </TouchableOpacity>
         </ThemedView>
       </ThemedView>
@@ -112,24 +118,70 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  listContent: { paddingHorizontal: 16, paddingTop: 16 },
-  messageRow: { flexDirection: 'row', marginBottom: 12 },
+  container: { 
+    flex: 1,
+    backgroundColor: '#efe7de', // Warna background chat WhatsApp
+  },
+  listContent: { 
+    paddingHorizontal: 10, 
+    paddingTop: 16 
+  },
+  messageRow: { 
+    flexDirection: 'row', 
+    marginBottom: 4 // Jarak antar chat lebih rapat
+  },
   userRow: { justifyContent: 'flex-end' },
   botRow: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '80%', padding: 12, borderRadius: 18 },
-  userBubble: { borderBottomRightRadius: 2 },
-  botBubble: { borderBottomLeftRadius: 2 },
-  messageText: { fontSize: 16, lineHeight: 20 },
-  userMessageText: { color: '#fff' },
+  bubble: { 
+    maxWidth: '85%', 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 8,
+    flexDirection: 'row', // Agar teks dan jam bisa sejajar horizontal
+    alignItems: 'flex-end',
+    elevation: 1, // Shadow di Android
+    shadowColor: '#000', // Shadow di iOS
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+  },
+  userBubble: { 
+    borderTopRightRadius: 0, // Sudut runcing di kanan atas
+  },
+  botBubble: { 
+    borderTopLeftRadius: 0, // Sudut runcing di kiri atas
+  },
+  messageText: { 
+    fontSize: 16, 
+    lineHeight: 20 
+  },
+  timestampText: {
+    fontSize: 11,
+    color: '#667781',
+    marginLeft: 8,
+    marginBottom: -2,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ccc',
+    padding: 8,
+    backgroundColor: '#f0f0f0',
   },
-  input: { flex: 1, borderRadius: 20, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 8, fontSize: 16, maxHeight: 100 },
-  sendButton: { marginLeft: 12, padding: 4 },
+  input: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginRight: 8,
+    fontSize: 16,
+    maxHeight: 100,
+  },
+  sendButton: {
+    backgroundColor: '#00a884', // Hijau tombol WhatsApp
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
