@@ -44,14 +44,28 @@ export default function ChatScreen() {
     setMessages((prev) => [userMessage, ...prev]);
     setInputText('');
 
-    // Simulasi respon otomatis dari bot
+  // Simulasi respon otomatis dari bot
     setTimeout(() => {
+      // 1. Tentukan pesan balasan berdasarkan input user
+      let replyText = "Siap! Ada lagi yang bisa saya bantu?"; // Jawaban default
+      const lowerInput = inputText.toLowerCase();
+
+      if (lowerInput.includes("halo") || lowerInput.includes("p")) {
+        replyText = "Halo juga! Ada apa nih?";
+      } else if (lowerInput.includes("kabar")) {
+        replyText = "Kabar baik, kalau kamu gimana?";
+      } else if (lowerInput.includes("terima kasih") || lowerInput.includes("thanks")) {
+        replyText = "Sama-sama! Senang bisa membantu. 😊";
+      }
+
+      // 2. Masukkan ke dalam objek pesan bot
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Ini adalah respon otomatis. Chat interface Anda sudah berfungsi!',
+        text: replyText, // Menggunakan variabel replyText yang dinamis
         sender: 'bot',
         timestamp: new Date(),
       };
+
       setMessages((prev) => [botResponse, ...prev]);
     }, 1000);
   }, [inputText]);
