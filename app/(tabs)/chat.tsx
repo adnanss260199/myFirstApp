@@ -39,7 +39,7 @@ export default function ChatScreen() {
 
   // 1. Inisialisasi User ID
   useEffect(() => {
-    const getUserId = async () => {
+    const getUserData = async () => {
       try {
         let id = await AsyncStorage.getItem('user_id');
         let name = await AsyncStorage.getItem('user_name');
@@ -64,7 +64,7 @@ export default function ChatScreen() {
         console.error("Gagal memproses User ID", e);
       }
     };
-    getUserId();
+    getUserData();
   }, []);
 
 // 2. Listener Firebase (Menerima Pesan Real-time)
@@ -131,7 +131,9 @@ export default function ChatScreen() {
         
         {/* Tampilkan Nama Pengirim untuk orang lain */}
         {!isMe && (
-          <ThemedText style={styles.senderNameText}>{item.senderName}</ThemedText>
+          <ThemedText style={styles.senderNameText}>
+            {item.senderName || 'Unknown User'}
+          </ThemedText>
         )}
         
         <ThemedText style={[styles.messageText, { color: '#000' }]}>{item.text}</ThemedText>
