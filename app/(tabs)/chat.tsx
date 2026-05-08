@@ -136,7 +136,7 @@ export default function ChatScreen() {
         
         <ThemedText style={[styles.messageText, { color: '#000' }]}>{item.text}</ThemedText>
         <ThemedText style={styles.timestampText}>
-          {/* Logika jam Anda */}
+          {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </ThemedText>
       </ThemedView>
     </ThemedView>
