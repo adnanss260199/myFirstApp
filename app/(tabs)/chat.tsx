@@ -18,6 +18,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onValue, push, ref } from 'firebase/database';
+import { Image } from 'react-native';
 
 interface Message {
   id: string;
@@ -33,17 +34,32 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
+  const[userName, setUserName] = useState<string>('');
+  const[userAvatar, setUserAvatar] = useState<string>('');
 
   // 1. Inisialisasi User ID
   useEffect(() => {
     const getUserId = async () => {
       try {
         let id = await AsyncStorage.getItem('user_id');
+        let name = await AsyncStorage.getItem('user_name');
+        let avatar = await AsyncStorage.getItem('user_avatar');
+
         if (!id) {
           id = 'USER-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-          await AsyncStorage.setItem('user_id', id);
+          name = 'User' + id.split('-')[1];
+          // menggunakan UI Avatar untuk foto profil sederhana
+          avatar = `https://ui-avatars.com/api/?name=${name}&background=random`; 
+          
+          await AsyncStorage.multiSet([
+            ['user_id', id],
+            ['user_name', name],
+            ['user_avatar', avatar]
+          ]);
         }
         setUserId(id);
+        setUserName(name || '');
+        setUserAvatar(avatar || '');
       } catch (e) {
         console.error("Gagal memproses User ID", e);
       }
@@ -87,36 +103,45 @@ export default function ChatScreen() {
     const newMessage = {
       text: inputText.trim(),
       senderId: userId,
+      senderName: userName,
+      senderAvatar: userAvatar,
       timestamp: Date.now(), // Gunakan format number agar aman di Firebase
     };
 
     push(chatRef, newMessage);
     setInputText('');
-  }, [inputText, userId]);
+  }, [inputText, userId, userName, userAvatar]);
 
-  const renderItem: ListRenderItem<Message> = ({ item }) => {
-    // Penentu posisi bubble: user (kanan/hijau), bot/orang lain (kiri/putih)
-    const isMe = item.sender === 'user';
+  // 4. Render Item untuk FlatList
+  const renderItem: ListRenderItem<any> = ({ item }) => {
+  const isMe = item.senderId === userId;
 
     return (
       <ThemedView style={[styles.messageRow, isMe ? styles.userRow : styles.botRow]}>
-        <ThemedView style={[
-          styles.bubble, 
-          isMe ? styles.userBubble : styles.botBubble,
-          { backgroundColor: isMe ? '#dcf8c6' : colorScheme === 'dark' ? '#1f2c33' : '#fff' }
-        ]}>
-          <ThemedText style={[styles.messageText, { color: '#000' }]}>
-            {item.text}
-          </ThemedText>
-          <ThemedText style={styles.timestampText}>
-            {item.timestamp instanceof Date && !isNaN(item.timestamp.getTime()) 
-              ? item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : '--:--'}
-          </ThemedText>
-        </ThemedView>
+      {/* Tampilkan avatar jika bukan pesan kita */}
+      {!isMe && (
+        <Image 
+          source={{ uri: item.senderAvatar || 'https://via.placeholder.com/30' }} 
+          style={styles.avatar} 
+        />
+      )}
+      
+      <ThemedView style={[styles.bubble, isMe ? styles.userBubble : styles.botBubble, 
+        { backgroundColor: isMe ? '#dcf8c6' : colorScheme === 'dark' ? '#1f2c33' : '#fff' }]}>
+        
+        {/* Tampilkan Nama Pengirim untuk orang lain */}
+        {!isMe && (
+          <ThemedText style={styles.senderNameText}>{item.senderName}</ThemedText>
+        )}
+        
+        <ThemedText style={[styles.messageText, { color: '#000' }]}>{item.text}</ThemedText>
+        <ThemedText style={styles.timestampText}>
+          {/* Logika jam Anda */}
+        </ThemedText>
       </ThemedView>
-    );
-  };
+    </ThemedView>
+  );
+};
 
   return (
     <KeyboardAvoidingView
@@ -157,6 +182,19 @@ export default function ChatScreen() {
 
 // ... (Styles tetap sama seperti kode Anda sebelumnya)
 const styles = StyleSheet.create({
+  avatar: {
+  width: 35,
+  height: 35,
+  borderRadius: 17.5,
+  marginRight: 8,
+  alignSelf: 'flex-end',
+},
+senderNameText: {
+  fontSize: 12,
+  fontWeight: 'bold',
+  color: '#075E54',
+  marginBottom: 2,
+},
   container: { flex: 1, backgroundColor: '#efe7de' },
   listContent: { paddingHorizontal: 10, paddingTop: 16 },
   messageRow: { flexDirection: 'row', marginBottom: 4 },
