@@ -1,217 +1,186 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  ListRenderItem,
-  Platform,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { database } from '@/constants/firebaseConfig';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onValue, push, ref } from 'firebase/database';
-import { Image } from 'react-native';
-
-interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'bot';
-  senderId?: string;
-  timestamp: Date;
-}
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ChatScreen() {
-  const [userId, setUserId] = useState<string>('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userName, setUserName] = useState('');
+  const [userAvatar, setUserAvatar] = useState('');
+  const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
-  const colorScheme = useColorScheme();
+  
+  // State untuk Banner Pending
+  const [isProfilePending, setIsProfilePending] = useState(false);
+  const [tempName, setTempName] = useState('');
+
   const insets = useSafeAreaInsets();
-  const[userName, setUserName] = useState<string>('');
-  const[userAvatar, setUserAvatar] = useState<string>('');
 
-  // 1. Inisialisasi User ID
+  // 1. Cek User saat buka App
   useEffect(() => {
-    const getUserData = async () => {
-      try {
-        let id = await AsyncStorage.getItem('user_id');
-        let name = await AsyncStorage.getItem('user_name');
-        let avatar = await AsyncStorage.getItem('user_avatar');
-
-        if (!id) {
-          id = 'USER-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-          name = 'User' + id.split('-')[1];
-          // menggunakan UI Avatar untuk foto profil sederhana
-          avatar = `https://ui-avatars.com/api/?name=${name}&background=random`; 
-          
-          await AsyncStorage.multiSet([
-            ['user_id', id],
-            ['user_name', name],
-            ['user_avatar', avatar]
-          ]);
-        }
-        setUserId(id);
-        setUserName(name || '');
-        setUserAvatar(avatar || '');
-      } catch (e) {
-        console.error("Gagal memproses User ID", e);
+    const checkUser = async () => {
+      const savedId = await AsyncStorage.getItem('user_id');
+      const savedName = await AsyncStorage.getItem('user_name');
+      
+      if (!savedId || !savedName) {
+        // Jika belum ada profil, aktifkan status "Pending"
+        setIsProfilePending(true);
+      } else {
+        setUserId(savedId);
+        setUserName(savedName);
+        setUserAvatar(`https://ui-avatars.com/api/?name=${savedName}&background=random`);
       }
     };
-    getUserData();
+    checkUser();
   }, []);
 
-// 2. Listener Firebase (Menerima Pesan Real-time)
-  useEffect(() => {
-    if (!userId) return;
+  // 2. Simpan Profil (dari Banner)
+  const handleSaveProfile = async () => {
+    if (tempName.trim().length < 2) return;
+    
+    const newId = 'USER-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+    const avatar = `https://ui-avatars.com/api/?name=${tempName}&background=random`;
 
+    await AsyncStorage.multiSet([
+      ['user_id', newId],
+      ['user_name', tempName],
+      ['user_avatar', avatar]
+    ]);
+
+    setUserId(newId);
+    setUserName(tempName);
+    setUserAvatar(avatar);
+    setIsProfilePending(false);
+  };
+
+  // 3. Monitor Chat (Tetap jalan meski belum login)
+  useEffect(() => {
     const chatRef = ref(database, 'messages');
-    const unsubscribe = onValue(chatRef, (snapshot) => {
+    return onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // Kita beri tipe Message[] pada variabel ini
-        const formattedMessages: Message[] = Object.keys(data).map((key) => ({
-          id: key,
-          text: data[key].text || '',
-          senderId: data[key].senderId || '',
-          // Tambahkan "as 'user' | 'bot'" di akhir baris ini
-          sender: (data[key].senderId === userId ? 'user' : 'bot') as 'user' | 'bot',
-          timestamp: new Date(data[key].timestamp),
-        })); 
-
-        // Urutkan dari yang terbaru karena FlatList kita 'inverted'
-        setMessages(formattedMessages.reverse());
-      } else {
-        setMessages([]); // Kosongkan jika database benar-benar kosong
+        const formatted = Object.keys(data).map(key => ({ 
+            id: key, 
+            ...data[key], 
+            timestamp: new Date(data[key].timestamp) 
+        }));
+        setMessages(formatted.reverse());
       }
     });
+  }, []);
 
-    return () => unsubscribe();
-  }, [userId]);
-
-  // 3. Fungsi Kirim Pesan
   const handleSend = useCallback(() => {
-    if (inputText.trim().length === 0 || !userId) return;
-
-    const chatRef = ref(database, 'messages');
-    const newMessage = {
+    if (!inputText.trim()) return;
+    if (isProfilePending) {
+        alert("Isi profil dulu di atas ya!");
+        return;
+    }
+    
+    push(ref(database, 'messages'), {
       text: inputText.trim(),
       senderId: userId,
       senderName: userName,
       senderAvatar: userAvatar,
-      timestamp: Date.now(), // Gunakan format number agar aman di Firebase
-    };
-
-    push(chatRef, newMessage);
+      timestamp: Date.now(),
+    });
     setInputText('');
-  }, [inputText, userId, userName, userAvatar]);
-
-  // 4. Render Item untuk FlatList
-  const renderItem: ListRenderItem<any> = ({ item }) => {
-  const isMe = item.senderId === userId;
-
-    return (
-      <ThemedView style={[styles.messageRow, isMe ? styles.userRow : styles.botRow]}>
-      {/* Tampilkan avatar jika bukan pesan kita */}
-      {!isMe && (
-        <Image 
-          source={{ uri: item.senderAvatar || 'https://via.placeholder.com/30' }} 
-          style={styles.avatar} 
-        />
-      )}
-      
-      <ThemedView style={[styles.bubble, isMe ? styles.userBubble : styles.botBubble, 
-        { backgroundColor: isMe ? '#dcf8c6' : colorScheme === 'dark' ? '#1f2c33' : '#fff' }]}>
-        
-        {/* Tampilkan Nama Pengirim untuk orang lain */}
-        {!isMe && (
-          <ThemedText style={styles.senderNameText}>
-            {item.senderName || 'Unknown User'}
-          </ThemedText>
-        )}
-        
-        <ThemedText style={[styles.messageText, { color: '#000' }]}>{item.text}</ThemedText>
-        <ThemedText style={styles.timestampText}>
-          {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </ThemedText>
-      </ThemedView>
-    </ThemedView>
-  );
-};
+  }, [inputText, userId, userName, userAvatar, isProfilePending]);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
-      style={styles.container}>
-      <ThemedView style={styles.container}>
+    <ThemedView style={styles.container}>
+      
+      {/* BANNER PENDING (Melayang di atas chat) */}
+      {isProfilePending && (
+        <ThemedView style={[styles.pendingBanner, { marginTop: insets.top + 10 }]}>
+          <ThemedText style={styles.pendingTitle}>Lengkapi Profil Yuk!</ThemedText>
+          <ThemedView style={styles.pendingRow}>
+            <TextInput 
+              style={styles.pendingInput} 
+              placeholder="Ketik namamu..." 
+              value={tempName} 
+              onChangeText={setTempName} 
+            />
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
+              <ThemedText style={{color: '#fff', fontWeight: 'bold', fontSize: 12}}>Simpan</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+        </ThemedView>
+      )}
+
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
         <FlatList
           data={messages}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
           inverted
-          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 16 }]}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 10, paddingTop: isProfilePending ? 100 : 10 }}
+          renderItem={({ item }) => {
+            // Jika ID belum ada, kita anggap semua pesan adalah orang lain (putih)
+            const isMe = userId ? item.senderId === userId : false;
+            return (
+              <ThemedView style={[styles.msgRow, isMe ? {alignSelf:'flex-end'} : {alignSelf:'flex-start'}]}>
+                <ThemedView style={[styles.bubble, {backgroundColor: isMe ? '#dcf8c6' : '#fff'}]}>
+                  <ThemedText style={styles.sName}>{item.senderName}</ThemedText>
+                  <ThemedText style={{color:'#000'}}>{item.text}</ThemedText>
+                </ThemedView>
+              </ThemedView>
+            );
+          }}
         />
-        <ThemedView style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                color: '#000', // Paksa hitam agar terbaca di bubble putih/hijau
-                borderColor: Colors[colorScheme ?? 'light'].tabIconDefault,
-              },
-            ]}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Ketik pesan..."
-            placeholderTextColor="#8E8E93"
-            multiline
+
+        {/* INPUT CHAT */}
+        <ThemedView style={[styles.inputArea, {paddingBottom: insets.bottom + 10}]}>
+          <TextInput 
+            style={styles.input} 
+            value={inputText} 
+            onChangeText={setInputText} 
+            placeholder={isProfilePending ? "Isi profil dulu..." : "Ketik pesan..."}
+            editable={!isProfilePending} // User gak bisa ngetik sebelum isi nama
           />
-          <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
+          <TouchableOpacity onPress={handleSend} style={[styles.sendBtn, isProfilePending && {backgroundColor: '#ccc'}]}>
             <IconSymbol name="paperplane.fill" size={20} color="#fff" />
           </TouchableOpacity>
         </ThemedView>
-      </ThemedView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </ThemedView>
   );
 }
 
-// ... (Styles tetap sama seperti kode Anda sebelumnya)
 const styles = StyleSheet.create({
-  avatar: {
-  width: 35,
-  height: 35,
-  borderRadius: 17.5,
-  marginRight: 8,
-  alignSelf: 'flex-end',
-},
-senderNameText: {
-  fontSize: 12,
-  fontWeight: 'bold',
-  color: '#075E54',
-  marginBottom: 2,
-},
   container: { flex: 1, backgroundColor: '#efe7de' },
-  listContent: { paddingHorizontal: 10, paddingTop: 16 },
-  messageRow: { flexDirection: 'row', marginBottom: 4 },
-  userRow: { justifyContent: 'flex-end' },
-  botRow: { justifyContent: 'flex-start' },
-  bubble: { 
-    maxWidth: '85%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
-    flexDirection: 'row', alignItems: 'flex-end', elevation: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2,
+  // Style Banner Pending
+  pendingBanner: { 
+    position: 'absolute', 
+    top: 0, left: 10, right: 10, 
+    backgroundColor: '#fff', 
+    padding: 15, 
+    borderRadius: 12, 
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10
   },
-  userBubble: { borderTopRightRadius: 0 },
-  botBubble: { borderTopLeftRadius: 0 },
-  messageText: { fontSize: 16, lineHeight: 20 },
-  timestampText: { fontSize: 11, color: '#667781', marginLeft: 8, marginBottom: -2 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 8, backgroundColor: '#f0f0f0' },
-  input: { flex: 1, backgroundColor: '#fff', borderRadius: 25, paddingHorizontal: 15, paddingVertical: 8, marginRight: 8, fontSize: 16, maxHeight: 100 },
-  sendButton: { backgroundColor: '#00a884', width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center' },
+  pendingTitle: { fontSize: 13, fontWeight: 'bold', marginBottom: 8, color: '#00a884' },
+  pendingRow: { flexDirection: 'row', alignItems: 'center' },
+  pendingInput: { flex: 1, backgroundColor: '#f0f0f0', padding: 8, borderRadius: 8, marginRight: 10, color: '#000' },
+  saveBtn: { backgroundColor: '#00a884', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 8 },
+  
+  msgRow: { marginBottom: 10, maxWidth: '80%' },
+  bubble: { padding: 10, borderRadius: 12, elevation: 1 },
+  sName: { fontSize: 10, fontWeight: 'bold', color: '#075E54', marginBottom: 2 },
+  inputArea: { flexDirection: 'row', padding: 10, backgroundColor: '#f0f0f0', alignItems: 'center' },
+  input: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10 },
+  sendBtn: { backgroundColor: '#00a884', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 });
