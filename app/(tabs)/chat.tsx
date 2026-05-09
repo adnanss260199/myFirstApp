@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { database } from '@/constants/firebaseConfig';
+import { database } from '@/services/firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { get, onValue, push, ref, set } from 'firebase/database';
 import React, { useCallback, useEffect, useState } from 'react';
