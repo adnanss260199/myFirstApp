@@ -1,20 +1,23 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { database } from '@/services/firebaseConfig';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { get, onValue, push, ref, set } from 'firebase/database';
+import { Ionicons } from '@expo/vector-icons';
+// PERBAIKAN 1: Jalur import disesuaikan tanpa tanda @ berlebih
+import { onAuthStateChanged } from 'firebase/auth';
+import { get, onValue, push, ref } from 'firebase/database';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   TextInput,
-  TouchableOpacity
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { auth, database } from '../../src/services/firebaseConfig';
 
 export default function ChatScreen() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -23,68 +26,78 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   
-  // State untuk Fitur Kontak & Login
-  const [isProfilePending, setIsProfilePending] = useState(false);
-  const [tempName, setTempName] = useState('');
-  const [targetContactId, setTargetContactId] = useState(''); // ID teman yang dicari
-  const [currentChatId, setCurrentChatId] = useState('global'); // Default ke chat global
+  const [isNotLoggedIn, setIsNotLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [targetContactId, setTargetContactId] = useState(''); 
+  const [currentChatId, setCurrentChatId] = useState('global'); 
 
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const savedId = await AsyncStorage.getItem('user_id');
-      const savedName = await AsyncStorage.getItem('user_name');
-      if (!savedId || !savedName) {
-        setIsProfilePending(true);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        const uid = currentUser.uid;
+        setUserId(uid);
+        
+        try {
+          const userRef = ref(database, `users/${uid}`);
+          const snapshot = await get(userRef);
+          
+          if (snapshot.exists()) {
+            const userData = snapshot.val();
+            const fallbackName = currentUser.email ? currentUser.email.split('@')[0] : 'User';
+            const name = userData.username || fallbackName;
+            
+            setUserName(name);
+            setUserAvatar(`https://ui-avatars.com/api/?name=${name}&background=random`);
+          } else {
+            const fallbackName = currentUser.email ? currentUser.email.split('@')[0] : 'User';
+            setUserName(fallbackName);
+            setUserAvatar(`https://ui-avatars.com/api/?name=${fallbackName}&background=random`);
+          }
+        } catch (error) {
+          console.error("Gagal memuat info user chat:", error);
+        }
+        setIsNotLoggedIn(false);
       } else {
-        setUserId(savedId);
-        setUserName(savedName);
-        setUserAvatar(`https://ui-avatars.com/api/?name=${savedName}&background=random`);
+        setIsNotLoggedIn(true);
       }
-    };
-    checkUser();
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
-  const handleSaveProfile = async () => {
-    if (tempName.trim().length < 2) return;
-    const newId = 'USER-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-    const avatar = `https://ui-avatars.com/api/?name=${tempName}&background=random`;
-
-    // Simpan ke HP
-    await AsyncStorage.multiSet([['user_id', newId], ['user_name', tempName], ['user_avatar', avatar]]);
-    
-    // Simpan ke Firebase Users agar bisa dicari orang lain
-    set(ref(database, 'users/' + newId), { username: tempName, avatar: avatar, id: newId });
-
-    setUserId(newId);
-    setUserName(tempName);
-    setUserAvatar(avatar);
-    setIsProfilePending(false);
-  };
-
-  // FUNGSI TAMBAH KONTAK / CARI TEMAN
   const handleAddContact = async () => {
-    if (!targetContactId.trim()) return;
-    const userRef = ref(database, 'users/' + targetContactId.trim().toUpperCase());
-    const snapshot = await get(userRef);
+    if (!targetContactId.trim() || !userId) return;
+    
+    try {
+      const targetUid = targetContactId.trim();
+      const userRef = ref(database, 'users/' + targetUid);
+      const snapshot = await get(userRef);
 
-    if (snapshot.exists()) {
-      const contactData = snapshot.val();
-      // Buat ID Ruangan Unik (ID kecil _ ID besar) agar konsisten
-      const ids = [userId, contactData.id].sort();
-      const roomId = `private_${ids[0]}_${ids[1]}`;
-      
-      setCurrentChatId(roomId);
-      Alert.alert("Berhasil!", `Sekarang chatting dengan ${contactData.username}`);
-    } else {
-      Alert.alert("Gagal", "ID Teman tidak ditemukan di database!");
+      if (snapshot.exists()) {
+        const contactData = snapshot.val();
+        const ids = [userId, targetUid].sort();
+        const roomId = `private_${ids[0]}_${ids[1]}`;
+        
+        setCurrentChatId(roomId);
+        Alert.alert("Berhasil!", `Sekarang terhubung dengan ${contactData.username || 'Pengguna'}`);
+        setTargetContactId(''); 
+      } else {
+        Alert.alert("Gagal", "UID Teman tidak ditemukan di Firebase database!");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Gagal mencari kontak.");
     }
   };
 
   useEffect(() => {
+    if (isNotLoggedIn) return;
+
     const path = currentChatId === 'global' ? 'messages' : `private_messages/${currentChatId}`;
     const chatRef = ref(database, path);
+    
     return onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -96,10 +109,10 @@ export default function ChatScreen() {
         setMessages([]);
       }
     });
-  }, [currentChatId]);
+  }, [currentChatId, isNotLoggedIn]);
 
   const handleSend = useCallback(() => {
-    if (!inputText.trim() || isProfilePending) return;
+    if (!inputText.trim() || isNotLoggedIn || !userId) return;
     const path = currentChatId === 'global' ? 'messages' : `private_messages/${currentChatId}`;
     
     push(ref(database, path), {
@@ -110,29 +123,50 @@ export default function ChatScreen() {
       timestamp: Date.now(),
     });
     setInputText('');
-  }, [inputText, userId, userName, userAvatar, isProfilePending, currentChatId]);
+  }, [inputText, userId, userName, userAvatar, isNotLoggedIn, currentChatId]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#00a884" />
+      </View>
+    );
+  }
+
+  if (isNotLoggedIn) {
+    return (
+      <ThemedView style={[styles.container, {justifyContent: 'center', alignItems: 'center', padding: 20}]}>
+        <Ionicons name="lock-closed" size={64} color="#888" />
+        <ThemedText style={{fontSize: 18, fontWeight: 'bold', marginTop: 15, textAlign: 'center'}}>
+          Akses Chat Terkunci
+        </ThemedText>
+        <ThemedText style={{textAlign: 'center', color: '#666', marginTop: 5, marginBottom: 20}}>
+          Kamu harus masuk atau mendaftar akun terlebih dahulu di tab Profile sebelum bisa berkirim pesan.
+        </ThemedText>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
-      
-      {/* HEADER: LOGIN & TAMBAH KONTAK */}
       <ThemedView style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        {isProfilePending ? (
-          <ThemedView style={styles.pendingRow}>
-            <TextInput style={styles.headerInput} placeholder="Nama kamu..." value={tempName} onChangeText={setTempName} />
-            <TouchableOpacity style={styles.btn} onPress={handleSaveProfile}><ThemedText style={styles.btnText}>Set Profil</ThemedText></TouchableOpacity>
-          </ThemedView>
-        ) : (
-          <ThemedView style={styles.pendingRow}>
-            <TextInput style={styles.headerInput} placeholder="Masukkan ID Teman..." value={targetContactId} onChangeText={setTargetContactId} />
-            <TouchableOpacity style={[styles.btn, {backgroundColor: '#075E54'}]} onPress={handleAddContact}>
-              <ThemedText style={styles.btnText}>Tambah</ThemedText>
+        <ThemedView style={styles.pendingRow}>
+          <TextInput 
+            style={styles.headerInput} 
+            placeholder="Masukkan ID/UID Teman..." 
+            value={targetContactId} 
+            onChangeText={setTargetContactId} 
+          />
+          <TouchableOpacity style={[styles.btn, {backgroundColor: '#075E54'}]} onPress={handleAddContact}>
+            <ThemedText style={styles.btnText}>Cari</ThemedText>
+          </TouchableOpacity>
+          
+          {currentChatId !== 'global' && (
+            <TouchableOpacity onPress={() => setCurrentChatId('global')} style={{marginLeft: 12}}>
+              <Ionicons name="earth" size={26} color="#00a884" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setCurrentChatId('global')} style={{marginLeft: 10}}>
-                <IconSymbol name="house.fill" size={24} color="#666" />
-            </TouchableOpacity>
-          </ThemedView>
-        )}
+          )}
+        </ThemedView>
       </ThemedView>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
@@ -148,7 +182,7 @@ export default function ChatScreen() {
             return (
               <ThemedView style={[styles.msgRow, isMe ? {alignSelf:'flex-end'} : {alignSelf:'flex-start'}]}>
                 <ThemedView style={[styles.bubble, {backgroundColor: isMe ? '#dcf8c6' : '#fff'}]}>
-                  <ThemedText style={styles.sName}>{item.senderName} ({item.senderId})</ThemedText>
+                  <ThemedText style={styles.sName}>{item.senderName} ({item.senderId?.substring(0, 5)}...)</ThemedText>
                   <ThemedText style={{color:'#000'}}>{item.text}</ThemedText>
                 </ThemedView>
               </ThemedView>
@@ -157,9 +191,9 @@ export default function ChatScreen() {
         />
 
         <ThemedView style={[styles.inputArea, {paddingBottom: insets.bottom + 10}]}>
-          <TextInput style={styles.input} value={inputText} onChangeText={setInputText} placeholder="Tulis pesan..." editable={!isProfilePending} />
-          <TouchableOpacity onPress={handleSend} style={styles.sendBtn} disabled={isProfilePending}>
-            <IconSymbol name="paperplane.fill" size={20} color="#fff" />
+          <TextInput style={styles.input} value={inputText} onChangeText={setInputText} placeholder="Tulis pesan..." />
+          <TouchableOpacity onPress={handleSend} style={styles.sendBtn}>
+            <Ionicons name="send" size={18} color="#fff" />
           </TouchableOpacity>
         </ThemedView>
       </KeyboardAvoidingView>
@@ -180,5 +214,6 @@ const styles = StyleSheet.create({
   sName: { fontSize: 9, fontWeight: 'bold', color: '#075E54', marginBottom: 2 },
   inputArea: { flexDirection: 'row', padding: 10, backgroundColor: '#f0f0f0', alignItems: 'center' },
   input: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, marginRight: 10 },
+  // PERBAIKAN 2 & 3: justifyComtent diganti menjadi justifyContent yang benar
   sendBtn: { backgroundColor: '#00a884', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
 });
