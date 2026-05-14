@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth"; // 1. Tambahkan import ini
 import { getDatabase } from "firebase/database";
 
 // Data ini diambil langsung dari Firebase Console kamu
@@ -18,3 +19,6 @@ const app = initializeApp(firebaseConfig);
 
 // Ekspor database agar bisa dipakai di chat.tsx
 export const database = getDatabase(app);
+
+// 2. Ekspor auth agar bisa digunakan di profile.tsx
+export const auth = getAuth(app);
